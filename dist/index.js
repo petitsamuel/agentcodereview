@@ -29963,6 +29963,14 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
+function isIgnoredBotComment(body) {
+    const lowerBody = body.toLowerCase();
+    // Ignore CodeRabbit rate limit warnings
+    if (lowerBody.includes('rate limit') && lowerBody.includes('coderabbit')) {
+        return true;
+    }
+    return false;
+}
 async function fetchReviewComments(octokit, owner, repo, prNumber) {
     const comments = [];
     // Fetch review comments (inline comments on code)
@@ -30270,6 +30278,9 @@ async function run() {
         let comments = await fetchReviewComments(octokit, owner, repo, prNumber);
         comments = await fetchResolvedStatus(octokit, owner, repo, prNumber, comments);
         const reviews = await fetchReviews(octokit, owner, repo, prNumber);
+        // Filter out ignored bot comments (e.g., CodeRabbit rate limit warnings)
+        comments = comments.filter((c) => !isIgnoredBotComment(c.body));
+        const filteredReviews = reviews.filter((r) => !isIgnoredBotComment(r.body));
         const openComments = comments.filter((c) => !c.isResolved);
         const resolvedComments = comments.filter((c) => c.isResolved);
         const feedback = {
@@ -30278,7 +30289,7 @@ async function run() {
             prUrl: pr.html_url,
             openComments,
             resolvedComments,
-            reviews,
+            reviews: filteredReviews,
             updatedAt: new Date().toISOString(),
         };
         core.info(`Found ${openComments.length} open, ${resolvedComments.length} resolved comments`);

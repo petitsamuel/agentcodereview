@@ -31,6 +31,15 @@ interface AggregatedFeedback {
   updatedAt: string
 }
 
+function isIgnoredBotComment(body: string): boolean {
+  const lowerBody = body.toLowerCase()
+  // Ignore CodeRabbit rate limit warnings
+  if (lowerBody.includes('rate limit') && lowerBody.includes('coderabbit')) {
+    return true
+  }
+  return false
+}
+
 async function fetchReviewComments(
   octokit: ReturnType<typeof github.getOctokit>,
   owner: string,
@@ -430,6 +439,10 @@ async function run(): Promise<void> {
     comments = await fetchResolvedStatus(octokit, owner, repo, prNumber, comments)
     const reviews = await fetchReviews(octokit, owner, repo, prNumber)
 
+    // Filter out ignored bot comments (e.g., CodeRabbit rate limit warnings)
+    comments = comments.filter((c) => !isIgnoredBotComment(c.body))
+    const filteredReviews = reviews.filter((r) => !isIgnoredBotComment(r.body))
+
     const openComments = comments.filter((c) => !c.isResolved)
     const resolvedComments = comments.filter((c) => c.isResolved)
 
@@ -439,7 +452,7 @@ async function run(): Promise<void> {
       prUrl: pr.html_url,
       openComments,
       resolvedComments,
-      reviews,
+      reviews: filteredReviews,
       updatedAt: new Date().toISOString(),
     }
 
