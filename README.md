@@ -29,6 +29,12 @@ on:
   pull_request_review_comment:
     types: [created, edited, deleted]
 
+# Required permissions for the action
+permissions:
+  contents: write       # To commit the feedback file to the branch
+  pull-requests: write  # To read PR data and review comments
+  issues: write         # To post/update the summary comment
+
 # Debounce: if multiple comments come in quickly, only run once
 concurrency:
   group: review-feedback-${{ github.event.pull_request.number }}
@@ -47,6 +53,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+> **Note:** The `permissions` block is required. Without it, you'll get a "Resource not accessible by integration" error.
 
 ## What It Does
 
