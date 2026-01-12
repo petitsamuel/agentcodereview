@@ -1,0 +1,32 @@
+name: Test Action
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Check dist is up to date
+        run: |
+          git diff --exit-code dist/ || {
+            echo "::error::dist/ is out of date. Run 'npm run build' and commit the changes."
+            exit 1
+          }
