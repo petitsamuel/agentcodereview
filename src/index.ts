@@ -40,6 +40,85 @@ function isIgnoredBotComment(body: string): boolean {
   return false
 }
 
+function parseGreptileComments(
+  commentId: number,
+  body: string,
+  user: string,
+  url: string,
+  createdAt: string
+): ReviewComment[] {
+  const comments: ReviewComment[] = []
+
+  // Match Greptile's structured format inside "Prompt To Fix With AI" blocks:
+  // Path: <filepath>
+  // Line: <line>:<line>
+  // Comment:
+  // <comment text>
+  const promptBlockRegex = /<details><summary>Prompt To Fix With AI<\/summary>\s*`{3,5}markdown\s*([\s\S]*?)`{3,5}\s*<\/details>/gi
+
+  let blockMatch
+  while ((blockMatch = promptBlockRegex.exec(body)) !== null) {
+    const blockContent = blockMatch[1]
+
+    // Parse the structured content
+    const pathMatch = blockContent.match(/Path:\s*(.+)/i)
+    const lineMatch = blockContent.match(/Line:\s*(\d+)(?::\d+)?/i)
+    const commentMatch = blockContent.match(/Comment:\s*([\s\S]*?)(?:How can I resolve|$)/i)
+
+    if (pathMatch && commentMatch) {
+      const path = pathMatch[1].trim()
+      const line = lineMatch ? parseInt(lineMatch[1], 10) : null
+      const commentText = commentMatch[1].trim()
+
+      comments.push({
+        id: commentId + comments.length, // Generate unique IDs
+        path,
+        line,
+        body: commentText,
+        user,
+        url,
+        createdAt,
+        isResolved: false,
+      })
+    }
+  }
+
+  return comments
+}
+
+async function fetchGreptileCommentsFromIssueComments(
+  octokit: ReturnType<typeof github.getOctokit>,
+  owner: string,
+  repo: string,
+  prNumber: number
+): Promise<ReviewComment[]> {
+  const { data: issueComments } = await octokit.rest.issues.listComments({
+    owner,
+    repo,
+    issue_number: prNumber,
+    per_page: 100,
+  })
+
+  const greptileComments: ReviewComment[] = []
+
+  for (const comment of issueComments) {
+    const user = comment.user?.login || 'unknown'
+    // Check if this is a Greptile bot comment with structured feedback
+    if (user === 'greptile-apps[bot]' && comment.body?.includes('Prompt To Fix With AI')) {
+      const parsed = parseGreptileComments(
+        comment.id,
+        comment.body,
+        user,
+        comment.html_url,
+        comment.created_at
+      )
+      greptileComments.push(...parsed)
+    }
+  }
+
+  return greptileComments
+}
+
 async function fetchReviewComments(
   octokit: ReturnType<typeof github.getOctokit>,
   owner: string,
@@ -438,6 +517,15 @@ async function run(): Promise<void> {
     let comments = await fetchReviewComments(octokit, owner, repo, prNumber)
     comments = await fetchResolvedStatus(octokit, owner, repo, prNumber, comments)
     const reviews = await fetchReviews(octokit, owner, repo, prNumber)
+
+    // Fetch structured comments from Greptile bot issue comments
+    const greptileComments = await fetchGreptileCommentsFromIssueComments(octokit, owner, repo, prNumber)
+    if (greptileComments.length > 0) {
+      core.info(`Found ${greptileComments.length} Greptile comments from issue comments`)
+    }
+
+    // Merge Greptile comments with review comments
+    comments = [...comments, ...greptileComments]
 
     // Filter out ignored bot comments (e.g., CodeRabbit rate limit warnings)
     comments = comments.filter((c) => !isIgnoredBotComment(c.body))
