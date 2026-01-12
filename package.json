@@ -4,7 +4,7 @@
   "description": "Aggregates PR review comments for AI coding assistants",
   "main": "dist/index.js",
   "scripts": {
-    "build": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
+    "build": "ncc build src/index.ts -o dist --license licenses.txt",
     "format": "prettier --write 'src/**/*.ts'",
     "lint": "eslint src/**/*.ts",
     "test": "jest"
