@@ -1,5 +1,5 @@
 name: 'Agent Code Review Feedback'
-description: 'Aggregates PR review comments into a file and comment for AI coding assistants'
+description: 'Aggregates PR review comments into a comment for AI coding assistants'
 author: 'petitsamuel'
 
 branding:
@@ -11,10 +11,6 @@ inputs:
     description: 'GitHub token for API access'
     required: true
     default: ${{ github.token }}
-  feedback-file:
-    description: 'Path to write the feedback file (set to empty to disable)'
-    required: false
-    default: '.github/REVIEW_FEEDBACK.md'
   post-comment:
     description: 'Whether to post/update a PR comment with the feedback'
     required: false
@@ -29,8 +25,6 @@ outputs:
     description: 'Number of open review comments'
   resolved-count:
     description: 'Number of resolved review comments'
-  feedback-file:
-    description: 'Path to the feedback file (if created)'
 
 runs:
   using: 'node20'

@@ -30109,18 +30109,51 @@ async function fetchReviews(octokit, owner, repo, prNumber) {
         submittedAt: review.submitted_at || '',
     }));
 }
+function generatePromptBlock(feedback) {
+    const lines = [];
+    lines.push(`Fix the following code review issues for PR #${feedback.prNumber} "${feedback.prTitle}":`);
+    lines.push('');
+    const byFile = groupByFile(feedback.openComments);
+    for (const [filePath, comments] of Object.entries(byFile)) {
+        lines.push(`## ${filePath}`);
+        lines.push('');
+        for (const comment of comments) {
+            const lineInfo = comment.line ? `Line ${comment.line}` : 'General';
+            lines.push(`### ${lineInfo}`);
+            lines.push('');
+            // Clean up the comment body - normalize whitespace but preserve structure
+            const cleanBody = comment.body
+                .split('\n')
+                .map(line => line.trimEnd())
+                .join('\n')
+                .trim();
+            lines.push(cleanBody);
+            lines.push('');
+        }
+    }
+    return lines.join('\n');
+}
 function generateMarkdown(feedback, includeResolved) {
     const lines = [];
+    const openCount = feedback.openComments.length;
+    const resolvedCount = feedback.resolvedComments.length;
     lines.push(`# PR #${feedback.prNumber} Review Feedback`);
     lines.push('');
-    lines.push(`> **For AI coding assistants:** Fix all unchecked items below. Each item includes`);
-    lines.push(`> the file path, line number, reviewer, and their feedback.`);
-    lines.push('>');
+    // Add prompt-ready block at the top if there are open issues
+    if (openCount > 0) {
+        lines.push('<details open>');
+        lines.push('<summary><strong>Copy this prompt for AI assistants</strong></summary>');
+        lines.push('');
+        lines.push('````');
+        lines.push(generatePromptBlock(feedback));
+        lines.push('````');
+        lines.push('');
+        lines.push('</details>');
+        lines.push('');
+    }
     lines.push(`> **PR:** [${feedback.prTitle}](${feedback.prUrl})`);
     lines.push(`> **Last updated:** ${feedback.updatedAt}`);
     lines.push('');
-    const openCount = feedback.openComments.length;
-    const resolvedCount = feedback.resolvedComments.length;
     lines.push(`**Status:** ${openCount} open issue${openCount !== 1 ? 's' : ''}`);
     if (includeResolved && resolvedCount > 0) {
         lines.push(` | ${resolvedCount} resolved`);
@@ -30242,68 +30275,9 @@ async function postOrUpdateComment(octokit, owner, repo, prNumber, markdown) {
         core.info('Created new comment');
     }
 }
-async function commitFeedbackFile(octokit, owner, repo, branch, filePath, content, prNumber) {
-    // Check if file exists
-    let sha;
-    try {
-        const { data: existingFile } = await octokit.rest.repos.getContent({
-            owner,
-            repo,
-            path: filePath,
-            ref: branch,
-        });
-        if ('sha' in existingFile) {
-            sha = existingFile.sha;
-        }
-    }
-    catch (error) {
-        if (error.status !== 404) {
-            throw error;
-        }
-        // File doesn't exist, that's fine
-    }
-    await octokit.rest.repos.createOrUpdateFileContents({
-        owner,
-        repo,
-        path: filePath,
-        message: `chore: update review feedback for PR #${prNumber} [skip ci]`,
-        content: Buffer.from(content).toString('base64'),
-        branch,
-        sha,
-    });
-    core.info(`Committed feedback file to ${filePath}`);
-}
-async function deleteFeedbackFile(octokit, owner, repo, branch, filePath, prNumber) {
-    try {
-        const { data: existingFile } = await octokit.rest.repos.getContent({
-            owner,
-            repo,
-            path: filePath,
-            ref: branch,
-        });
-        if ('sha' in existingFile) {
-            await octokit.rest.repos.deleteFile({
-                owner,
-                repo,
-                path: filePath,
-                message: `chore: remove review feedback (all resolved) for PR #${prNumber} [skip ci]`,
-                sha: existingFile.sha,
-                branch,
-            });
-            core.info(`Deleted feedback file ${filePath}`);
-        }
-    }
-    catch (error) {
-        if (error.status !== 404) {
-            throw error;
-        }
-        // File doesn't exist, nothing to delete
-    }
-}
 async function run() {
     try {
         const token = core.getInput('github-token', { required: true });
-        const feedbackFilePath = core.getInput('feedback-file');
         const postComment = core.getInput('post-comment') === 'true';
         const includeResolved = core.getInput('include-resolved') === 'true';
         const octokit = github.getOctokit(token);
@@ -30323,7 +30297,6 @@ async function run() {
             repo,
             pull_number: prNumber,
         });
-        const branch = pr.head.ref;
         core.info(`Processing PR #${prNumber}: ${pr.title}`);
         // Fetch all review data
         let comments = await fetchReviewComments(octokit, owner, repo, prNumber);
@@ -30357,20 +30330,9 @@ async function run() {
         if (postComment) {
             await postOrUpdateComment(octokit, owner, repo, prNumber, markdown);
         }
-        // Commit feedback file
-        if (feedbackFilePath) {
-            if (openComments.length === 0) {
-                // No open comments - delete the file if it exists
-                await deleteFeedbackFile(octokit, owner, repo, branch, feedbackFilePath, prNumber);
-            }
-            else {
-                await commitFeedbackFile(octokit, owner, repo, branch, feedbackFilePath, markdown, prNumber);
-            }
-        }
         // Set outputs
         core.setOutput('open-count', openComments.length);
         core.setOutput('resolved-count', resolvedComments.length);
-        core.setOutput('feedback-file', feedbackFilePath);
         core.info('Done!');
     }
     catch (error) {
