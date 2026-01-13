@@ -11,9 +11,7 @@ When using AI coding assistants to fix PR review feedback, you typically:
 4. Manually copy comments into your AI tool
 5. Repeat
 
-This action automates step 4 by aggregating all review comments into:
-- A **PR comment** (easy to copy/paste)
-- A **file in the branch** (AI tools can read directly)
+This action automates step 4 by aggregating all review comments into a **PR comment** that's easy to copy/paste into your AI tool.
 
 ## Usage
 
@@ -31,7 +29,6 @@ on:
 
 # Required permissions for the action
 permissions:
-  contents: write       # To commit the feedback file to the branch
   pull-requests: write  # To read PR data and review comments
   issues: write         # To post/update the summary comment
 
@@ -64,16 +61,12 @@ When review comments are added to a PR:
 2. **Checks resolved status** via GraphQL API
 3. **Generates structured markdown** grouped by file
 4. **Posts/updates a PR comment** with the aggregated feedback
-5. **Commits a feedback file** to the branch (optional)
-
-When all comments are resolved, the feedback file is automatically deleted.
 
 ## Inputs
 
 | Input | Description | Default |
 |-------|-------------|---------|
 | `github-token` | GitHub token for API access | `${{ github.token }}` |
-| `feedback-file` | Path for feedback file (empty to disable) | `.github/REVIEW_FEEDBACK.md` |
 | `post-comment` | Post/update PR comment | `true` |
 | `include-resolved` | Include resolved items (as checked) | `true` |
 
@@ -83,7 +76,6 @@ When all comments are resolved, the feedback file is automatically deleted.
 |--------|-------------|
 | `open-count` | Number of open review comments |
 | `resolved-count` | Number of resolved comments |
-| `feedback-file` | Path to feedback file (if created) |
 
 ## Generated Feedback Format
 
@@ -126,14 +118,9 @@ When all comments are resolved, the feedback file is automatically deleted.
 
 ## Using with AI Tools
 
-### Claude Code / Cursor / VS Code
+### Claude Code / Cursor / ChatGPT
 
-Just tell your AI tool:
-> "Read .github/REVIEW_FEEDBACK.md and fix all the open issues"
-
-### Claude Code (Web) / ChatGPT
-
-Copy the feedback from the PR comment and paste it into your chat.
+Copy the feedback from the PR comment and paste it into your AI tool.
 
 ### Automated (Claude Code CLI)
 
